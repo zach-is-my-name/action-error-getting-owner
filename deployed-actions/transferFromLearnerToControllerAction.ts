@@ -1,4 +1,4 @@
-//ipfs://QmbHVUrSctDKuZqVc1U7MTVa1fgJN4tdVUK3PF5JzcMNjn
+//ipfs://QmdEBy44Ke4Kous39G4fzPvgTiEe5vxoURmvCqNGNELQF6
 const transferFromLearnerToControllerAction =
 async () => {
   try{
@@ -69,18 +69,25 @@ async () => {
     const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
 
     const feeData = await provider.getFeeData();
+    console.log("Gas Fee Data:");
+    // console.log("  maxFeePerGas:", feeData.maxFeePerGas ? feeData.maxFeePerGas.toString() : "undefined");
+    // console.log("  maxPriorityFeePerGas:", feeData.maxPriorityFeePerGas ? feeData.maxPriorityFeePerGas.toString() : "undefined");
     if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) throw new Error("feeData undefined")
 
     const txObject = {
       to: usdcContractAddress,
-      from: controllerAddress,
       nonce: latestNonce,
       chainId,
+      gasLimit: ethers.utils.hexlify(100000),
+      from: controllerAddress,
       data: txData,
       type: 2,
-      gasLimit: ethers.utils.hexlify(100000),
-      maxPriorityFeePerGas: ethers.utils.hexlify(feeData.maxPriorityFeePerGas.mul(120).div(100)),
-      maxFeePerGas: ethers.utils.hexlify(feeData.maxFeePerGas.mul(120).div(100))
+      maxPriorityFeePerGas: ethers.utils.hexlify(
+        feeData.maxPriorityFeePerGas.mul(120).div(100)
+      ),
+      maxFeePerGas: ethers.utils.hexlify(
+        feeData.maxFeePerGas.mul(120).div(100)
+      ),
     };
 
     const serializedTx = ethers.utils.serializeTransaction(txObject);
@@ -103,9 +110,7 @@ async () => {
       Lit.Actions.setResponse({ response: JSON.stringify({ error: "Failed to sign transaction.  Check logs for details" }) });
       return;
     }
-    console.log("SIGN_AND_COMBINE_ECDSA_SUCCESS")
-    throw new Error("SIGN_AND_COMBINE_ECDSA_SUCCESS")
-    return;
+
     let txResponse;
     let linkData;
     try {

@@ -1,8 +1,7 @@
 import { LocalStorage } from "node-localstorage";
 import {ethers, TransactionRequest, AddressLike, SignatureLike, toBeHex, TransactionResponse} from 'ethers'
 import { expect, test, beforeAll, afterAll } from "bun:test";
-import { LitNodeClient, encryptString, } from '@lit-protocol/lit-node-client';
-import { LitContracts } from "@lit-protocol/contracts-sdk"
+import { LitNodeClient, encryptString } from '@lit-protocol/lit-node-client';
 import { LitNetwork } from "@lit-protocol/constants";
 import { AccessControlConditions, ExecuteJsResponse, SessionSigsMap } from "@lit-protocol/types";
 import { learnerSessionId_DurationSigs, teacherSessionId_DurationSigs } from "./setup/sessionId_duration_sigs";
@@ -18,7 +17,6 @@ const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 let inputPublicKey: string;
 let outputPublicKey: string;
-let isPermittedAction: boolean;
 let inputAddress: string;
 let outputAddress: string;
 let getControllerKeyClaimDataResponse: any;
@@ -27,7 +25,7 @@ let learnerSessionSigs: SessionSigsMap | undefined;
 let teacherSessionSigs: SessionSigsMap | undefined;
 
 const approve_ipfsId = "QmUExi6PorFUZmWzxQB9jV963vuQutcrdPZAVc6dmVj9Tq"
-const transferFromAction_ipfsId = "QmbHVUrSctDKuZqVc1U7MTVa1fgJN4tdVUK3PF5JzcMNjn";
+const transferFromAction_ipfsId = "QmdEBy44Ke4Kous39G4fzPvgTiEe5vxoURmvCqNGNELQF6";
 let approveTx: TransactionRequest;
 let signedApproveTx: string;
 let learner_sessionIdAndDurationSig: string;
@@ -74,7 +72,7 @@ beforeAll(async () => {
     alertWhenUnauthorized: false,
     litNetwork: LitNetwork.DatilDev,
     checkNodeAttestation: false,
-    debug: true,
+    debug: false,
     storageProvider: {
       provider: new LocalStorage("./lit_storage.db"),
     },
@@ -82,7 +80,7 @@ beforeAll(async () => {
 
   await litNodeClient.connect()
 
-  const litContracts = new LitContracts({ signer: learnerWallet, network: LitNetwork.DatilDev });
+
   const learnerSignedData = await learnerSessionId_DurationSigs(secureSessionId, BigInt(duration), learnerWallet )
   learner_sessionIdAndDurationSig = learnerSignedData.learner_sessionIdAndDurationSig;
 
@@ -177,16 +175,15 @@ beforeAll(async () => {
   controllerClaimKeySigs = restoreSignatures(condensedSigs);
 
   //mintClaimBurn
+  const MINT_CLAIM_BURN_URL = 'http://127.0.0.1:54321/functions/v1/mint-controller-pkp'
+  
   let mintClaimResponse: any;
   try {
   mintClaimResponse = await supabaseClient.functions.invoke('mint-controller-pkp', {
     body: JSON.stringify({
       keyType: 2,
       derivedKeyId: derivedKeyId,
-      signatures: controllerClaimKeySigs,
-      env: "dev",
-      ipfsIdsToRegister: [transferFromAction_ipfsId]
-
+      signatures: controllerClaimKeySigs
     })
   });
   } catch (error) {
@@ -196,8 +193,6 @@ beforeAll(async () => {
   console.log("mintClaimResponse", mintClaimResponse)
   outputPublicKey = mintClaimResponse.data.pkpInfo.publicKey;
   outputAddress = ethers.computeAddress(outputPublicKey);
-  
-
   // approve test setup
   const feeData = await provider.getFeeData();
   if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) throw new Error("feeData undefined")
