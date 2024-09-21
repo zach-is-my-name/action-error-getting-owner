@@ -72,7 +72,7 @@ beforeAll(async () => {
     alertWhenUnauthorized: false,
     litNetwork: LitNetwork.DatilDev,
     checkNodeAttestation: false,
-    debug: false,
+    debug: true,
     storageProvider: {
       provider: new LocalStorage("./lit_storage.db"),
     },
