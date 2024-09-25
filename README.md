@@ -15,11 +15,12 @@ cp .env.example .env.test
 
 
 4.) Fund LEARNER_PRIVATEKEY:"<private-key>" 
-  A.) Add Sepolia USDC
+  
+  4a.) Add Sepolia USDC
   - Visit https://faucet.circle.com/  
   - enter address associated with LEARNER_PRIVATEKEY;
 
-  B.) Add Sepolia Eth  
+  4b.) Add Sepolia Eth  
   - Create an Issue with your Learner Address and I'll transfer Sepolia Eth to that address 
   OR
   - https://cloud.google.com/application/web3/faucet/ethereum/sepolia
