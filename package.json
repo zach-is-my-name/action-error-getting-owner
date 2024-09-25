@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@lit-protocol/constants": "^6.5.3",
+    "@lit-protocol/contracts-sdk": "^6.5.3",
     "@lit-protocol/lit-node-client": "^6.5.3",
     "@lit-protocol/types": "^6.5.3",
     "@supabase/supabase-js": "^2.45.4",
