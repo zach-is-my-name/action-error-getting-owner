@@ -7,9 +7,11 @@ import { LitNetwork } from "@lit-protocol/constants";
 import { AccessControlConditions, ExecuteJsResponse, SessionSigsMap } from "@lit-protocol/types";
 import { learnerSessionId_DurationSigs, teacherSessionId_DurationSigs } from "./setup/sessionId_duration_sigs";
 import { sessionSigsForDecryptInAction } from "./setup/sessionSigsForDecryptInAction";
+import { getSafeFeeData } from "./setup/getSafeFeeData"
 import { condenseSignatures } from "./setup/condenseClaimKeySigs";
 import { restoreSignatures } from "./setup//restoreClaimKeySigs";
 import { createClient } from '@supabase/supabase-js';
+import { FeeData } from "ethers";
 const supabaseUrl = "https://onhlhmondvxwwiwnruvo.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9uaGxobW9uZHZ4d3dpd25ydXZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTc0ODg1ODUsImV4cCI6MjAxMzA2NDU4NX0.QjriFvDkfGR8-w_WdTIgMDgcH5EXvs5gyRBOEV880ic";
 const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
@@ -48,20 +50,32 @@ let accessControlConditions: AccessControlConditions;
 let userId: string;
 const amount = ".001";
 const amountScaled = ethers.parseUnits(".001", 6)
-const provider = new ethers.JsonRpcProvider(Bun.env.PROVIDER_URL_ARBITRUM_SEPOLIA)
+const providerUrl = Bun.env.PROVIDER_URL_ARBITRUM_SEPOLIA
+const provider = new ethers.JsonRpcProvider(providerUrl);
 const rpcChain = Bun.env.CHAIN_NAME_FOR_ACTION_PARAMS;
 const rpcChainId = Bun.env.CHAIN_ID_FOR_ACTION_PARAMS;
 const usdcContractAddress = Bun.env.USDC_CONTRACT_ADDRESS_ARBITRUM_SEPOLIA; 
 
 const teacherPrivateKey = Bun.env.TEACHER_PRIVATEKEY;
 const learnerPrivateKey = Bun.env.LEARNER_PRIVATEKEY;
-if (!learnerPrivateKey?.length || !teacherPrivateKey?.length || !usdcContractAddress) throw new Error('failed to import bun env')
+if (!learnerPrivateKey?.length || !teacherPrivateKey?.length || !usdcContractAddress || !providerUrl?.length || !rpcChainId?.length) throw new Error('failed to import bun env')
 const learnerWallet = new ethers.Wallet(learnerPrivateKey, provider)
 const teacherWallet = new ethers.Wallet(teacherPrivateKey, provider)
 console.log("learnerWallet.address", learnerWallet.address);
 console.log("teacherWallet.address", teacherWallet.address);
 console.log("usdcContractAddress", usdcContractAddress);
+const expectedChainId = parseInt(rpcChainId, 10);
 
+try {
+  const network = await provider.getNetwork();
+  console.log("Provider network:", network);
+  
+  if (network.chainId !== BigInt(expectedChainId)) {
+    throw new Error(`Connected to wrong network. Expected chainId: ${expectedChainId}, got: ${network.chainId}`);
+  }
+} catch (error) {
+  throw new Error(`Failed to connect to the network: ${(error as Error).message}`);
+}
 const secureSessionId = ethers.hexlify(ethers.randomBytes(16))
 const duration = BigInt(30); // mins
 let approveActionResult: ExecuteJsResponse;
@@ -201,18 +215,27 @@ beforeAll(async () => {
     return;
   }
   // approve test setup
-  const feeData = await provider.getFeeData();
-  if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) throw new Error("feeData undefined")
+// In your beforeAll function, replace the feeData fetching code with:
+let feeData: FeeData;
+try {
+  feeData = await getSafeFeeData(provider);
+} catch (error) {
+  throw new Error(`Failed to get gas data: ${(error as Error).message}`);
+}
 
-  approveTx = {
-    to: usdcContractAddress,
-    gasLimit: 65000,
-    chainId: rpcChainId,
-    maxPriorityFeePerGas: toBeHex((feeData?.maxPriorityFeePerGas * BigInt(130)) / BigInt(100)),
-    maxFeePerGas: toBeHex((feeData?.maxFeePerGas * BigInt(130)) / BigInt(100)),
-    nonce,
-    data: new ethers.Interface(["function approve(address spender, uint256 amount)"]).encodeFunctionData("approve", [controllerAddress, amountScaled]),
-  };
+if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) {
+  throw new Error('Failed to get valid fee data');
+}
+
+approveTx = {
+  to: usdcContractAddress,
+  gasLimit: 65000,
+  chainId: rpcChainId,
+  maxPriorityFeePerGas: toBeHex((feeData.maxPriorityFeePerGas * BigInt(130)) / BigInt(100)),
+  maxFeePerGas: toBeHex((feeData.maxFeePerGas * BigInt(130)) / BigInt(100)),
+  nonce,
+  data: new ethers.Interface(["function approve(address spender, uint256 amount)"]).encodeFunctionData("approve", [controllerAddress, amountScaled]),
+};
 
   signedApproveTx = await learnerWallet.signTransaction(approveTx);
 })
