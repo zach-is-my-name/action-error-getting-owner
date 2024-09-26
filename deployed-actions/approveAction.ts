@@ -39,7 +39,7 @@ async () => {
       },
       async () => {
         try {
-          const rpcUrl = await Lit.Actions.getRpcUrl({ chain: "sepolia" });
+          const rpcUrl = await Lit.Actions.getRpcUrl({ chain: rpcChain });
           const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
           console.log("RPC URL:", rpcUrl);
           const network = await provider.getNetwork();

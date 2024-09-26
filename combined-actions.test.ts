@@ -18,7 +18,6 @@ const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 let inputPublicKey: string;
 let outputPublicKey: string;
-let isPermittedAction: boolean;
 let inputAddress: string;
 let outputAddress: string;
 let getControllerKeyClaimDataResponse: any;
@@ -26,21 +25,17 @@ let litNodeClient: LitNodeClient;
 let learnerSessionSigs: SessionSigsMap | undefined;
 let teacherSessionSigs: SessionSigsMap | undefined;
 
-const approve_ipfsId = "QmUExi6PorFUZmWzxQB9jV963vuQutcrdPZAVc6dmVj9Tq"
-const transferFromAction_ipfsId = "QmeLA4hgYNxbYPZsoYTgzqjpZWnghvdmBRB98bmypDJkqg";
+const approve_ipfsId = "QmXcNM4NQ6TpLSeJ3jAKNSKWPbf3MPmznGdipAMwhWn1PJ"
+const transferFromAction_ipfsId = "QmXVaxPjBGoLfNtZ3F2NiQaTFZyFqJLJqAfKL9RPmBntZ5";
 let approveTx: TransactionRequest;
 let signedApproveTx: string;
 let learner_sessionIdAndDurationSig: string;
 let approveTxResponse: TransactionResponse | null;
-let mintPkpResponse: any;
 const claimKeyIpfsId = "QmcAqoHwpC1gS59GQKgVXGhfhCqBYvF1PpzvZypv6XW6Xk"
 
 let controllerAddress: AddressLike
 let controllerPubKey: string;
 let controllerClaimKeySigs: SignatureLike[];
-let usdcContractAddress = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
-let chainId = 84532;
-let chain = "sepolia";
 let sessionDataLearnerSig: SignatureLike;
 let sessionDataTeacherSig: SignatureLike;
 let sessionDuration = 30;
@@ -51,14 +46,16 @@ let learnerAddressEncryptHash: string;
 let accessControlConditions: AccessControlConditions;
 
 let userId: string;
-const amount = ".10";
-const amountScaled = ethers.parseUnits(".10", 6)
-let allowanceAmountParsed: string;
-const provider = new ethers.JsonRpcProvider('https://rpc.ankr.com/eth_sepolia')
+const amount = ".001";
+const amountScaled = ethers.parseUnits(".001", 6)
+const provider = new ethers.JsonRpcProvider(Bun.env.PROVIDER_URL_ARBITRUM_SEPOLIA)
+const rpcChain = Bun.env.CHAIN_NAME_FOR_ACTION_PARAMS;
+const rpcChainId = Bun.env.CHAIN_ID_FOR_ACTION_PARAMS;
+const usdcContractAddress = Bun.env.USDC_CONTRACT_ADDRESS_ARBITRUM_SEPOLIA; 
 
 const teacherPrivateKey = Bun.env.TEACHER_PRIVATEKEY;
 const learnerPrivateKey = Bun.env.LEARNER_PRIVATEKEY;
-if (!learnerPrivateKey?.length || !teacherPrivateKey?.length) throw new Error('failed to import pk envs')
+if (!learnerPrivateKey?.length || !teacherPrivateKey?.length || !usdcContractAddress) throw new Error('failed to import bun env')
 const learnerWallet = new ethers.Wallet(learnerPrivateKey, provider)
 const teacherWallet = new ethers.Wallet(teacherPrivateKey, provider)
 console.log("learnerWallet.address", learnerWallet.address);
@@ -196,8 +193,13 @@ beforeAll(async () => {
   console.log("mintClaimResponse", mintClaimResponse)
   outputPublicKey = mintClaimResponse.data.pkpInfo.publicKey;
   outputAddress = ethers.computeAddress(outputPublicKey);
-  
 
+  const usdcContract = new ethers.Contract(usdcContractAddress, ["function allowance(address owner, address spender) view returns (uint256)"], provider);
+  const currentAllowance = await usdcContract.allowance(learnerWallet.address, controllerAddress);
+  if (currentAllowance >= amountScaled) {
+    console.log("Approval already set, skipping approve transaction");
+    return;
+  }
   // approve test setup
   const feeData = await provider.getFeeData();
   if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) throw new Error("feeData undefined")
@@ -205,9 +207,9 @@ beforeAll(async () => {
   approveTx = {
     to: usdcContractAddress,
     gasLimit: 65000,
-    chainId: 11155111,
-    maxPriorityFeePerGas: toBeHex((feeData?.maxPriorityFeePerGas * BigInt(120)) / BigInt(100)),
-    maxFeePerGas: toBeHex((feeData?.maxFeePerGas * BigInt(120)) / BigInt(100)),
+    chainId: rpcChainId,
+    maxPriorityFeePerGas: toBeHex((feeData?.maxPriorityFeePerGas * BigInt(130)) / BigInt(100)),
+    maxFeePerGas: toBeHex((feeData?.maxFeePerGas * BigInt(130)) / BigInt(100)),
     nonce,
     data: new ethers.Interface(["function approve(address spender, uint256 amount)"]).encodeFunctionData("approve", [controllerAddress, amountScaled]),
   };
@@ -221,7 +223,9 @@ test("approve", async () => {
       signedTx: signedApproveTx,
       secureSessionId,
       sessionIdAndDurationSig: learner_sessionIdAndDurationSig,
-      duration: String(sessionDuration)
+      duration: String(sessionDuration),
+      rpcChain,
+      rpcChainId
     }
 
     console.log("jsParams", jsParams)
@@ -256,8 +260,6 @@ test("transferFromLearnerToControllerAction", async () => {
     controllerAddress,
     controllerPubKey: controllerPubKey.startsWith("0x") ? controllerPubKey.slice(2) : controllerPubKey,
     usdcContractAddress,
-    chain,
-    chainId,
     sessionDataLearnerSig,
     sessionDataTeacherSig,
     sessionDuration,
@@ -265,7 +267,10 @@ test("transferFromLearnerToControllerAction", async () => {
     hashedLearnerAddress,
     hashedTeacherAddress,
     amount,
-    accessControlConditions
+    accessControlConditions,
+    rpcChain,
+    rpcChainId
+
   }
   console.log("jsParams", jsParams)
   try {

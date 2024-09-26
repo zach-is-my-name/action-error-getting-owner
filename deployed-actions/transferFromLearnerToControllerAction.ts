@@ -49,15 +49,15 @@ async () => {
       decryptedLearnerAddress: decryptedLearnerAddress,
       usdcContractAddress: usdcContractAddress,
       controllerAddress: controllerAddress,
-      chain: chain,
+      chain: rpcChain,
       amount: amount
     })});
 
     console.log("decryptedLearnerAddress length", JSON.stringify(decryptedLearnerAddress.length));
 
 
-    const rpcUrl = await Lit.Actions.getRpcUrl({ chain: chain });
-    const latestNonce = await Lit.Actions.getLatestNonce({ address: controllerAddress, chain });
+    const rpcUrl = await Lit.Actions.getRpcUrl({ chain: rpcChain });
+    const latestNonce = await Lit.Actions.getLatestNonce({ address: controllerAddress, chain: rpcChain });
 
     const abi = [ "function transferFrom(address from, address to, uint256 value) returns (bool)" ];
 
@@ -75,7 +75,7 @@ async () => {
       to: usdcContractAddress,
       from: controllerAddress,
       nonce: latestNonce,
-      chainId,
+      chainId: rpcChainId,
       data: txData,
       type: 2,
       gasLimit: ethers.utils.hexlify(100000),
