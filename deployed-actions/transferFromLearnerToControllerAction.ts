@@ -85,7 +85,7 @@ async () => {
 
     const serializedTx = ethers.utils.serializeTransaction(txObject);
     const hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(serializedTx));
-    const toSign = await new TextEncoder().encode(hash);
+    const toSign = ethers.utils.arrayify(hash);
 
     console.log("addresses", JSON.stringify({decryptedLearnerAddress, controllerAddress}));
 

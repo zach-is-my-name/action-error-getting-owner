@@ -27,7 +27,7 @@ let learnerSessionSigs: SessionSigsMap | undefined;
 let teacherSessionSigs: SessionSigsMap | undefined;
 
 const approve_ipfsId = "QmUExi6PorFUZmWzxQB9jV963vuQutcrdPZAVc6dmVj9Tq"
-const transferFromAction_ipfsId = "QmbHVUrSctDKuZqVc1U7MTVa1fgJN4tdVUK3PF5JzcMNjn";
+const transferFromAction_ipfsId = "QmeLA4hgYNxbYPZsoYTgzqjpZWnghvdmBRB98bmypDJkqg";
 let approveTx: TransactionRequest;
 let signedApproveTx: string;
 let learner_sessionIdAndDurationSig: string;
