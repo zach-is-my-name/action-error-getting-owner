@@ -1,4 +1,4 @@
-//ipfs://QmYKSYSixCPnv8EhYrToF5MYTM4KQmGG5rvV4XchNmeQVq
+//ipfs://QmVsArWZgnAWVU5kSuPjXpgVu4PfZe3vpbFZmTVzFMuiYX
 const transferFromLearnerToControllerAction =
 async () => {
   try {
@@ -92,35 +92,56 @@ async () => {
       console.log("signAndCombineEcdsa Error: ", error)
     }
 
+    console.log("signature", signature)
+
     let txResponse;
     let linkData;
     let tx;
     let txError;
 
-    try {
-      txResponse = await Lit.Actions.runOnce(
-        {
-          waitForResponse: true,
-          name: "transferFromTxSender"
-        },
-        async () => {
-          const signedTx = ethers.utils.serializeTransaction(txObject, signature);
-          console.log("signedTx", signedTx); 
-          console.log("provider", provider.connection); 
-          tx = await provider.sendTransaction(signedTx);
-          await tx.wait(); 
-          console.log("submit transferFrom tx success");
-        }
-      );
-
-
-
-      // Create IPFS link
-    } catch (error) {
-      txError = error;
-      console.error(error);
+try {
+  const signedTx = ethers.utils.serializeTransaction(txObject, signature);
+  txResponse = await Lit.Actions.runOnce(
+    {
+      waitForResponse: true,
+      name: "transferFromTxSender"
+    },
+    async () => {
+      try {
+        console.log("Signed transaction created");
+        
+        const tx = await provider.sendTransaction(signedTx);
+        console.log("Transaction sent, hash:", tx.hash);
+        
+        const receipt = await tx.wait();
+        console.log("Transaction mined, receipt:", JSON.stringify(receipt));
+        
+        return JSON.stringify({
+          success: true,
+          tx: tx.hash,
+          receipt: {
+            blockHash: receipt.blockHash,
+            blockNumber: receipt.blockNumber,
+            transactionHash: receipt.transactionHash
+          }
+        });
+      } catch (error) {
+        console.error("Error in runOnce execution:", error.message);
+        return JSON.stringify({
+          success: false,
+          error: error.message,
+          errorStack: error.stack
+        });
+      }
     }
+  );
+  console.log("txResponse in try", typeof txResponse, txResponse);
+} catch (error) {
+  txError = error;
+  console.error("Error in runOnce catch:", error.message, error.stack);
+}
     if (!tx) return;
+    console.log("txResponse outside", txResponse);
     Lit.Actions.setResponse({response: JSON.stringify({
       tx,
       txError

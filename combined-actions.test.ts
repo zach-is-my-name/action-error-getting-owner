@@ -32,7 +32,7 @@ let learnerSessionSigs: SessionSigsMap | undefined;
 let teacherSessionSigs: SessionSigsMap | undefined;
 
 const approve_ipfsId = "QmXcNM4NQ6TpLSeJ3jAKNSKWPbf3MPmznGdipAMwhWn1PJ"
-const transferFromAction_ipfsId = "QmYKSYSixCPnv8EhYrToF5MYTM4KQmGG5rvV4XchNmeQVq";
+const transferFromAction_ipfsId = "QmVsArWZgnAWVU5kSuPjXpgVu4PfZe3vpbFZmTVzFMuiYX";
 let signedApproveTx: string;
 let learner_sessionIdAndDurationSig: string;
 let approveTxResponse: TransactionResponse | null;
@@ -88,7 +88,7 @@ beforeAll(async () => {
     alertWhenUnauthorized: false,
     litNetwork: LitNetwork.DatilDev,
     checkNodeAttestation: false,
-    debug: false,
+    debug: true,
     storageProvider: {
       provider: new LocalStorage("./lit_storage.db"),
     },
