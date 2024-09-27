@@ -23,7 +23,7 @@ cp .env.example .env.test
   4b.) Add Base Sepolia Eth for gas 
   - Create an Issue with your Learner Address and I'll transfer Sepolia Eth to that address 
   OR
-  - https://cloud.google.com/application/web3/faucet/ethereum/sepolia
+  - https://www.alchemy.com/faucets/base-sepolia
 
 5.) Run tests:
 
