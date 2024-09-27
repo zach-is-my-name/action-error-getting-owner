@@ -12,6 +12,8 @@ import { condenseSignatures } from "./setup/condenseClaimKeySigs";
 import { restoreSignatures } from "./setup//restoreClaimKeySigs";
 import { createClient } from '@supabase/supabase-js';
 import { FeeData } from "ethers";
+import { waitForTransaction } from "./setup/waitForTx";
+import { constructTxResponseFromAction } from "./setup/constructTxResponseFromAction";
 const supabaseUrl = "https://onhlhmondvxwwiwnruvo.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9uaGxobW9uZHZ4d3dpd25ydXZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTc0ODg1ODUsImV4cCI6MjAxMzA2NDU4NX0.QjriFvDkfGR8-w_WdTIgMDgcH5EXvs5gyRBOEV880ic";
 const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
@@ -22,14 +24,15 @@ let inputPublicKey: string;
 let outputPublicKey: string;
 let inputAddress: string;
 let outputAddress: string;
+let learnerWalletAddressSigningApproveTx: AddressLike;
+let teacherWalletAddressCallTransferAction: AddressLike;
 let getControllerKeyClaimDataResponse: any;
 let litNodeClient: LitNodeClient;
 let learnerSessionSigs: SessionSigsMap | undefined;
 let teacherSessionSigs: SessionSigsMap | undefined;
 
 const approve_ipfsId = "QmXcNM4NQ6TpLSeJ3jAKNSKWPbf3MPmznGdipAMwhWn1PJ"
-const transferFromAction_ipfsId = "QmXVaxPjBGoLfNtZ3F2NiQaTFZyFqJLJqAfKL9RPmBntZ5";
-let approveTx: TransactionRequest;
+const transferFromAction_ipfsId = "QmYKSYSixCPnv8EhYrToF5MYTM4KQmGG5rvV4XchNmeQVq";
 let signedApproveTx: string;
 let learner_sessionIdAndDurationSig: string;
 let approveTxResponse: TransactionResponse | null;
@@ -50,11 +53,11 @@ let accessControlConditions: AccessControlConditions;
 let userId: string;
 const amount = ".001";
 const amountScaled = ethers.parseUnits(".001", 6)
-const providerUrl = Bun.env.PROVIDER_URL_ARBITRUM_SEPOLIA
+const providerUrl = Bun.env.PROVIDER_URL_BASE_SEPOLIA;
 const provider = new ethers.JsonRpcProvider(providerUrl);
-const rpcChain = Bun.env.CHAIN_NAME_FOR_ACTION_PARAMS;
-const rpcChainId = Bun.env.CHAIN_ID_FOR_ACTION_PARAMS;
-const usdcContractAddress = Bun.env.USDC_CONTRACT_ADDRESS_ARBITRUM_SEPOLIA; 
+const rpcChain = Bun.env.CHAIN_NAME_FOR_ACTION_PARAMS_BASE_SEPOLIA;
+const rpcChainId = Bun.env.CHAIN_ID_FOR_ACTION_PARAMS_BASE_SEPOLIA;
+const usdcContractAddress = Bun.env.USDC_CONTRACT_ADDRESS_BASE_SEPOLIA; 
 
 const teacherPrivateKey = Bun.env.TEACHER_PRIVATEKEY;
 const learnerPrivateKey = Bun.env.LEARNER_PRIVATEKEY;
@@ -93,7 +96,6 @@ beforeAll(async () => {
 
   await litNodeClient.connect()
 
-  const litContracts = new LitContracts({ signer: learnerWallet, network: LitNetwork.DatilDev });
   const learnerSignedData = await learnerSessionId_DurationSigs(secureSessionId, BigInt(duration), learnerWallet )
   learner_sessionIdAndDurationSig = learnerSignedData.learner_sessionIdAndDurationSig;
 
@@ -215,7 +217,6 @@ beforeAll(async () => {
     return;
   }
   // approve test setup
-// In your beforeAll function, replace the feeData fetching code with:
 let feeData: FeeData;
 try {
   feeData = await getSafeFeeData(provider);
@@ -227,9 +228,12 @@ if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) {
   throw new Error('Failed to get valid fee data');
 }
 
-approveTx = {
+const maxTransactionCostCap = ethers.parseUnits("0.001", "ether"); // Example cap: 0.001 ETH (lower, sensible cap)
+
+// Construct approve transaction
+const approveTx = {
   to: usdcContractAddress,
-  gasLimit: 65000,
+  gasLimit: 65000, // Set this based on typical ERC-20 approve transaction
   chainId: rpcChainId,
   maxPriorityFeePerGas: toBeHex((feeData.maxPriorityFeePerGas * BigInt(130)) / BigInt(100)),
   maxFeePerGas: toBeHex((feeData.maxFeePerGas * BigInt(130)) / BigInt(100)),
@@ -237,7 +241,16 @@ approveTx = {
   data: new ethers.Interface(["function approve(address spender, uint256 amount)"]).encodeFunctionData("approve", [controllerAddress, amountScaled]),
 };
 
+// Calculate the estimated transaction cost for EIP-1559 (Type 2) transactions
+const estimatedCost = BigInt(approveTx?.gasLimit) * BigInt(feeData.maxFeePerGas);
+
+// Compare the estimated cost with the pre-defined cap
+if (estimatedCost > maxTransactionCostCap) {
+  throw new Error(`Transaction exceeds the maximum allowed cost of ${ethers.formatUnits(maxTransactionCostCap, "ether")} ETH`);
+}
+// Proceed with the transaction if under the cap
   signedApproveTx = await learnerWallet.signTransaction(approveTx);
+  learnerWalletAddressSigningApproveTx = learnerWallet.address;
 })
 
 test("approve", async () => {
@@ -258,22 +271,27 @@ test("approve", async () => {
       jsParams
     })
     console.log("actionResult", approveActionResult)
+
+    const txHash = JSON.parse(approveActionResult.response as string);
+    console.log("Transaction hash from Lit Action:", txHash);
+
+    approveTxResponse = await waitForTransaction(provider, txHash);
+    if (approveTxResponse && Object.keys(approveTxResponse).length > 0){
+      const approveTxResponseData = constructTxResponseFromAction(approveTxResponse)
+      console.log("approveTxResponse: ", approveTxResponseData); 
+    }
     expect(true).toBe(true);
   } catch(error) {
-    console.error("Error in executeJs:", error);
+    console.error("Error in approve test:", error);
     expect(true).toBe(false);
   }
-
-  const txHash = JSON.parse(approveActionResult.response as string);
-
-  approveTxResponse = await provider.getTransaction(txHash);
-  await approveTxResponse!.wait(1);
-}, 30000);
+}, 30000); // Increased timeout to account for potential retries
 
 test("transferFromLearnerToControllerAction", async () => {
   await litNodeClient.disconnect();
   (litNodeClient?.config?.storageProvider?.provider as LocalStorage).clear();
   await litNodeClient.connect();
+  teacherWalletAddressCallTransferAction = teacherWallet.address;
   teacherSessionSigs = await sessionSigsForDecryptInAction(teacherWallet, litNodeClient, accessControlConditions, learnerAddressEncryptHash);
   const jsParams = {
     ipfsId: transferFromAction_ipfsId,
@@ -316,5 +334,7 @@ afterAll(async () => {
   console.log("outputPublicKey", outputPublicKey)
   console.log("inputAddress", inputAddress);
   console.log("outputAddress", outputAddress);
+  console.log("learnerWalletAddressSigningApproveTx: ", learnerWalletAddressSigningApproveTx);
+  console.log("teacherWalletAddressCallTransferAction: ", teacherWalletAddressCallTransferAction);
 })
 

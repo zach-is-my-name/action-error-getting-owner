@@ -1,7 +1,7 @@
-//ipfs://QmbHVUrSctDKuZqVc1U7MTVa1fgJN4tdVUK3PF5JzcMNjn
+//ipfs://QmYmVkzcvyC9Hyek7ZbNr4njrX93Yii8KzcDWEiWSQ4Von
 const transferFromLearnerToControllerAction =
 async () => {
-  try{
+  try {
     const verifyDurationAndId = () => {
       // Encode the data
       const encodedData = ethers.utils.concat([
@@ -45,18 +45,10 @@ async () => {
       console.log("Successfully Decrypted learner address");
     }
 
-    Lit.Actions.setResponse({response: JSON.stringify({
-      decryptedLearnerAddress: decryptedLearnerAddress,
-      usdcContractAddress: usdcContractAddress,
-      controllerAddress: controllerAddress,
-      chain: rpcChain,
-      amount: amount
-    })});
-
-    console.log("decryptedLearnerAddress length", JSON.stringify(decryptedLearnerAddress.length));
-
+    console.log("decryptedLearnerAddress length", JSON.stringify(decryptedLearnerAddress.length));              
 
     const rpcUrl = await Lit.Actions.getRpcUrl({ chain: rpcChain });
+
     const latestNonce = await Lit.Actions.getLatestNonce({ address: controllerAddress, chain: rpcChain });
 
     const abi = [ "function transferFrom(address from, address to, uint256 value) returns (bool)" ];
@@ -82,7 +74,6 @@ async () => {
       maxPriorityFeePerGas: ethers.utils.hexlify(feeData.maxPriorityFeePerGas.mul(120).div(100)),
       maxFeePerGas: ethers.utils.hexlify(feeData.maxFeePerGas.mul(120).div(100))
     };
-
     const serializedTx = ethers.utils.serializeTransaction(txObject);
     const hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(serializedTx));
     const toSign = ethers.utils.arrayify(hash);
@@ -96,58 +87,78 @@ async () => {
         publicKey: controllerPubKey,
         sigName: "sign_transfer_from",
       });
-      console.log("sign transferFrom success");
 
     } catch (error) {
       console.log("signAndCombineEcdsa Error: ", error)
-      Lit.Actions.setResponse({ response: JSON.stringify({ error: "Failed to sign transaction.  Check logs for details" }) });
-      return;
     }
-    console.log("SIGN_AND_COMBINE_ECDSA_SUCCESS")
-    throw new Error("SIGN_AND_COMBINE_ECDSA_SUCCESS")
-    return;
+
     let txResponse;
     let linkData;
+    let tx;
+    let txError;
+
     try {
-      txResponse = await Lit.Actions.runOnce({
-        waitForResponse: true,
-        name: "transferFromTxSender"
-      }, async () => {
+      txResponse = await Lit.Actions.runOnce(
+        {
+          waitForResponse: true,
+          name: "transferFromTxSender"
+        },
+        async () => {
           const signedTx = ethers.utils.serializeTransaction(txObject, signature);
-          const tx = await provider.sendTransaction(signedTx);
-          await tx.wait(); // Wait for the transaction to be mined
+          console.log("signedTx", signedTx); 
+          console.log("provider", provider.connection); 
+          tx = await provider.sendTransaction(signedTx);
+          await tx.wait(); 
           console.log("submit transferFrom tx success");
+        }
+      );
 
-          return JSON.stringify({
-            transactionHash: tx.hash,
-            blockHash: tx.blockHash,
-            blockNumber: tx.blockNumber
-          });
-        });
 
-      txResponse = JSON.parse(txResponse);
 
       // Create IPFS link
-      linkData = {
-        originalTxHash: hash,
-        relayedTxHash: txResponse.transactionHash,
-        learnerAddress: decryptedLearnerAddress,
-        controllerAddress: controllerAddress,
-        amount: amount,
-        usdcContractAddress: usdcContractAddress,
-        sessionId: sessionId,
-        blockHash: txResponse.blockHash,
-        blockNumber: txResponse.blockNumber,
-        timestamp: Date.now()
-      };
     } catch (error) {
-      console.error(error)
+      txError = error;
+      console.error(error);
     }
+    if (!tx) return;
+    Lit.Actions.setResponse({response: JSON.stringify({
+      tx,
+      txError
+    })});
+    txResponse = JSON.parse(txResponse);
+
+    throw new Error("attempted sendTransaction");
+
     let ipfsHash;
+    let fetchResult;
+    linkData = {
+      originalTxHash: hash,
+      relayedTxHash: txResponse.transactionHash,
+      learnerAddress: decryptedLearnerAddress,
+      controllerAddress: controllerAddress,
+      amount: amount,
+      usdcContractAddress: usdcContractAddress,
+      sessionId: sessionId,
+      blockHash: txResponse.blockHash,
+      blockNumber: txResponse.blockNumber,
+      timestamp: Date.now()
+    };
+
     try {
-      ipfsHash = await Lit.Actions.ipfsStore({ data: JSON.stringify(linkData) });
-      console.log("store data to ipfs success");
-      console.log('Data stored on IPFS:', ipfsHash);
+      fetchResult = await Lit.Actions.runOnce({
+        waitForResponse: true,
+        name: "call pinDataWithAction function"
+      }, async () => {
+          await fetch({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ linkData })
+          });
+
+          const data = await response.json();
+          ipfsHash = data.ipfsHash;
+          console.log(`Data stored on IPFS: ${ipfsHash}`);
+        })
     } catch (error) {
       console.error('Failed to store data on IPFS:', error);
     }
